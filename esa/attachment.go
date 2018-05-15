@@ -78,7 +78,7 @@ func (a *AttachmentService) getImageInfo(path string) (url.Values, error) {
 
 // Almost Copy of esa.go:post()
 func (a *AttachmentService) post(esaURL string, bodyType string, body io.Reader, v interface{}) (resp *http.Response, err error) {
-	res, err := a.client.client.Post(a.client.createURL(esaURL), bodyType, body)
+	res, err := a.client.Client.Post(a.client.createURL(esaURL), bodyType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +161,7 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 		return "", err
 	}
 
-	res, err := a.client.client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), data)
+	res, err := a.client.Client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), data)
 	if err != nil {
 		return "", err
 	}
