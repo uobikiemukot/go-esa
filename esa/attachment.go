@@ -77,12 +77,11 @@ func (a *AttachmentService) getImageInfo(path string) (url.Values, error) {
 }
 
 // Almost Copy of esa.go:post()
-func (a *AttachmentService) post(esaURL string, bodyType string, body io.Reader, v interface{}) (resp *http.Response, err error) {
+func (a *AttachmentService) postOK(esaURL string, bodyType string, body io.Reader, v interface{}) (resp *http.Response, err error) {
 	res, err := a.client.Client.Post(a.client.createURL(esaURL), bodyType, body)
 	if err != nil {
 		return nil, err
 	}
-
 	defer res.Body.Close()
 
 	// ref: https://github.com/esaio/esa-ruby/blob/3431e02e967845cf4c12bbd5860312d7dda2771f/lib/esa/api_methods.rb#L175
@@ -105,7 +104,7 @@ func (a *AttachmentService) postAttachmentPolicy(teamName string, values url.Val
 	teamURL := TeamURL + "/" + teamName + AttchmentPolicyURL
 	data := bytes.NewBufferString(values.Encode())
 
-	res, err := a.client.post(teamURL, PolicyBodyType, data, &attachmentPolicyRes)
+	res, err := a.postOK(teamURL, PolicyBodyType, data, &attachmentPolicyRes)
 	if err != nil {
 		return nil, err
 	}
