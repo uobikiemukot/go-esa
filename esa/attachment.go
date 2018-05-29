@@ -47,23 +47,23 @@ type FormValue struct {
 }
 
 // getFileType ファイルのMIMEタイプ, サイズ, ベースパスを取得する
-func (a *AttachmentService) getFileInfo(path string) (url.Values, error) {
+func (a *AttachmentService) getFileInfo(path string) (url.Values, []byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 
-	bytes, err := ioutil.ReadAll(f)
+	data, err := ioutil.ReadAll(f)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	return url.Values{
-		"type": {http.DetectContentType(bytes)},
+		"type": {http.DetectContentType(data)},
 		"name": {filepath.Base(path)},
-		"size": {fmt.Sprint(len(bytes))},
-	}, nil
+		"size": {fmt.Sprint(len(data))},
+	}, data, nil
 }
 
 // postAttachmentPolicy AWS S3にアップロードするための情報を取得する
@@ -87,7 +87,7 @@ func (a *AttachmentService) postAttachmentPolicy(teamName string, values url.Val
 func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (string, error) {
 	var err error
 
-	values, err := a.getFileInfo(path)
+	values, data, err := a.getFileInfo(path)
 	if err != nil {
 		return "", fmt.Errorf("getFileInfo Failed (path: %s): %v\n", path, err)
 	}
@@ -97,14 +97,8 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 		return "", fmt.Errorf("postAttachmentPolicy Failed (values: %v): %v\n", values, err)
 	}
 
-	f, err := os.Open(path)
-	if err != nil {
-		return "", fmt.Errorf("Open Failed: %v\n", err)
-	}
-	defer f.Close()
-
-	data := &bytes.Buffer{}
-	w := multipart.NewWriter(data)
+	part := &bytes.Buffer{}
+	w := multipart.NewWriter(part)
 	defer w.Close()
 
 	w.WriteField("AWSAccessKeyId", policy.Form.AWSAccessKeyId)
@@ -116,17 +110,17 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 	w.WriteField("Content-Disposition", policy.Form.ContentDisposition)
 	w.WriteField("acl", policy.Form.Acl)
 
-	part, err := w.CreateFormFile("file", filepath.Base(path))
+	file, err := w.CreateFormFile("file", filepath.Base(path))
 	if err != nil {
 		return "", fmt.Errorf("CreateFormFile Failed: %v\n", err)
 	}
 
-	_, err = io.Copy(part, f)
+	_, err = io.Copy(file, bytes.NewBuffer(data))
 	if err != nil {
 		return "", fmt.Errorf("Copy Failed: %v\n", err)
 	}
 
-	res, err := a.client.Client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), data)
+	res, err := a.client.Client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), part)
 	if err != nil {
 		return "", fmt.Errorf("Post Failed (endpoint: %s): %v\n", policy.Attachment.Endpoint, err)
 	}
