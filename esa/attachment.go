@@ -2,7 +2,6 @@ package esa
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -90,22 +89,23 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 
 	values, err := a.getFileInfo(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getFileInfo Failed (path: %s): %v\n", path, err)
 	}
 
 	policy, err := a.postAttachmentPolicy(teamName, values)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("postAttachmentPolicy Failed (values: %v): %v\n", values, err)
 	}
 
 	f, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Open Failed: %v\n", err)
 	}
 	defer f.Close()
 
 	data := &bytes.Buffer{}
 	w := multipart.NewWriter(data)
+	defer w.Close()
 
 	w.WriteField("AWSAccessKeyId", policy.Form.AWSAccessKeyId)
 	w.WriteField("signature", policy.Form.Signature)
@@ -118,28 +118,23 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 
 	part, err := w.CreateFormFile("file", filepath.Base(path))
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("CreateFormFile Failed: %v\n", err)
 	}
 
 	_, err = io.Copy(part, f)
 	if err != nil {
-		return "", err
-	}
-
-	err = w.Close()
-	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Copy Failed: %v\n", err)
 	}
 
 	res, err := a.client.Client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), data)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("Post Failed (endpoint: %s): %v\n", policy.Attachment.Endpoint, err)
 	}
 	defer res.Body.Close()
 
 	// ref: https://github.com/esaio/esa-ruby/blob/3431e02e967845cf4c12bbd5860312d7dda2771f/lib/esa/api_methods.rb#L181
 	if res.StatusCode != http.StatusNoContent {
-		return "", errors.New(http.StatusText(res.StatusCode))
+		return "", fmt.Errorf("HTTP status is not http.StatusNoContent: %v\n", http.StatusText(res.StatusCode))
 	}
 
 	return policy.Attachment.Url, nil
