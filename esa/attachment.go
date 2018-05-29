@@ -4,12 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
 	"io"
-	"mime"
+	"io/ioutil"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -18,9 +14,9 @@ import (
 )
 
 const (
-	// 画像アップロードのポリシーを問い合わせるURL
+	// ファイルアップロードのポリシーを問い合わせるURL
 	AttchmentPolicyURL = "/attachments/policies"
-	// 画像アップロードのポリシーを取得する際のデータタイプ
+	// ファイルアップロードのポリシーを取得する際のデータタイプ
 	PolicyBodyType = "application/x-www-form-urlencoded"
 )
 
@@ -29,7 +25,7 @@ type AttachmentService struct {
 	client *Client
 }
 
-// AttachmentPolicyResponse 画像アップロードに必要なポリシーのレスポンス
+// AttachmentPolicyResponse ファイルアップロードに必要なポリシーのレスポンス
 type AttachmentPolicyResponse struct {
 	Attachment AttachmentValue `json:"attachment"`
 	Form       FormValue       `json:"form"`
@@ -51,28 +47,23 @@ type FormValue struct {
 	Acl                string `json:"acl"`
 }
 
-// getImageType 画像のMIMEタイプ, サイズ, ベースパスを取得する
-func (a *AttachmentService) getImageInfo(path string) (url.Values, error) {
+// getFileType ファイルのMIMEタイプ, サイズ, ベースパスを取得する
+func (a *AttachmentService) getFileInfo(path string) (url.Values, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 
-	_, format, err := image.DecodeConfig(f)
-	if err != nil {
-		return nil, err
-	}
-
-	size, err := f.Seek(0, io.SeekEnd)
+	bytes, err := ioutil.ReadAll(f)
 	if err != nil {
 		return nil, err
 	}
 
 	return url.Values{
-		"type": {mime.TypeByExtension("." + format)},
+		"type": {http.DetectContentType(bytes)},
 		"name": {filepath.Base(path)},
-		"size": {fmt.Sprint(size)},
+		"size": {fmt.Sprint(len(bytes))},
 	}, nil
 }
 
@@ -93,11 +84,11 @@ func (a *AttachmentService) postAttachmentPolicy(teamName string, values url.Val
 	return &attachmentPolicyRes, nil
 }
 
-// UploadAttachmentFile 画像をesaにアップロードする
+// UploadAttachmentFile ファイルをesaにアップロードする
 func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (string, error) {
 	var err error
 
-	values, err := a.getImageInfo(path)
+	values, err := a.getFileInfo(path)
 	if err != nil {
 		return "", err
 	}
