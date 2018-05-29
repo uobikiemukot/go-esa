@@ -83,6 +83,34 @@ func (a *AttachmentService) postAttachmentPolicy(teamName string, values url.Val
 	return &attachmentPolicyRes, nil
 }
 
+// createAttachmentPart postで送信するmultipartのデータを作成する
+func createAttachmentPart(data []byte, basename string, policy *AttachmentPolicyResponse) (string, io.Reader, error) {
+	part := &bytes.Buffer{}
+	w := multipart.NewWriter(part)
+	defer w.Close()
+
+	w.WriteField("AWSAccessKeyId", policy.Form.AWSAccessKeyId)
+	w.WriteField("signature", policy.Form.Signature)
+	w.WriteField("policy", policy.Form.Policy)
+	w.WriteField("key", policy.Form.Key)
+	w.WriteField("Content-Type", policy.Form.ContentType)
+	w.WriteField("Cache-Control", policy.Form.CacheControl)
+	w.WriteField("Content-Disposition", policy.Form.ContentDisposition)
+	w.WriteField("acl", policy.Form.Acl)
+
+	file, err := w.CreateFormFile("file", basename)
+	if err != nil {
+		return "", nil, err
+	}
+
+	_, err = io.Copy(file, bytes.NewBuffer(data))
+	if err != nil {
+		return "", nil, err
+	}
+
+	return w.FormDataContentType(), part, nil
+}
+
 // UploadAttachmentFile ファイルをesaにアップロードする
 func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (string, error) {
 	var err error
@@ -97,32 +125,14 @@ func (a *AttachmentService) UploadAttachmentFile(teamName string, path string) (
 		return "", fmt.Errorf("postAttachmentPolicy Failed (values: %v): %v\n", values, err)
 	}
 
-	part := &bytes.Buffer{}
-	w := multipart.NewWriter(part)
-	defer w.Close()
-
-	w.WriteField("AWSAccessKeyId", policy.Form.AWSAccessKeyId)
-	w.WriteField("signature", policy.Form.Signature)
-	w.WriteField("policy", policy.Form.Policy)
-	w.WriteField("key", policy.Form.Key)
-	w.WriteField("Content-Type", policy.Form.ContentType)
-	w.WriteField("Cache-Control", policy.Form.CacheControl)
-	w.WriteField("Content-Disposition", policy.Form.ContentDisposition)
-	w.WriteField("acl", policy.Form.Acl)
-
-	file, err := w.CreateFormFile("file", filepath.Base(path))
+	ctype, part, err := createAttachmentPart(data, filepath.Base(path), policy)
 	if err != nil {
-		return "", fmt.Errorf("CreateFormFile Failed: %v\n", err)
+		return "", fmt.Errorf("createAttachmentPart Failed: %v\n", err)
 	}
 
-	_, err = io.Copy(file, bytes.NewBuffer(data))
+	res, err := a.client.Client.Post(policy.Attachment.Endpoint, ctype, part)
 	if err != nil {
-		return "", fmt.Errorf("Copy Failed: %v\n", err)
-	}
-
-	res, err := a.client.Client.Post(policy.Attachment.Endpoint, w.FormDataContentType(), part)
-	if err != nil {
-		return "", fmt.Errorf("Post Failed (endpoint: %s): %v\n", policy.Attachment.Endpoint, err)
+		return "", fmt.Errorf("Post Failed (endpoint: %s, ctype: %s): %v\n", policy.Attachment.Endpoint, ctype, err)
 	}
 	defer res.Body.Close()
 
