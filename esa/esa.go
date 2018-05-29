@@ -53,10 +53,9 @@ func (c *Client) post(esaURL string, bodyType string, body io.Reader, v interfac
 	if err != nil {
 		return nil, err
 	}
-
 	defer res.Body.Close()
 
-	if res.StatusCode != http.StatusCreated {
+	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return nil, errors.New(http.StatusText(res.StatusCode))
 	}
 
